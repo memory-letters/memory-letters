@@ -1,9 +1,0 @@
-README.md
-pyproject.toml
-memory_letters/__init__.py
-memory_letters/__main__.py
-memory_letters.egg-info/PKG-INFO
-memory_letters.egg-info/SOURCES.txt
-memory_letters.egg-info/dependency_links.txt
-memory_letters.egg-info/entry_points.txt
-memory_letters.egg-info/top_level.txt
