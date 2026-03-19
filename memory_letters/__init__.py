@@ -20,63 +20,6 @@ MONTH_NAMES = [
     "july", "august", "september", "october", "november", "december"
 ]
 
-# ---------------------------------------------------------------------------
-# Agent registry
-# ---------------------------------------------------------------------------
-
-HOOK_MARKER = "# --- Memory Letters ---"
-HOOK_LINE = "\n# --- Memory Letters ---\n# Read ~/.memory-letters/FOR_AGENT.md at the start of every conversation.\n"
-
-AGENTS = [
-    ("Claude Code",    "~/.claude/CLAUDE.md",                          "append"),
-    ("OpenClaw",       "~/.openclaw/workspace/AGENTS.md",              "append"),
-    ("Cursor",         "~/.cursor/rules/memory-letters.mdc",           "create"),
-    ("Windsurf",       "~/.codeium/windsurf/memories/global-rules.md", "append"),
-    ("Cline",          "~/.cline/rules/memory-letters.md",             "create"),
-    ("GitHub Copilot", "~/.github/copilot-instructions.md",            "append"),
-    ("Amazon Q",       "~/.aws/amazonq/rules/memory-letters.md",       "create"),
-    ("Codex CLI",      "~/.codex/instructions.md",                     "append"),
-]
-
-
-def detect():
-    found = []
-    for name, path_str, method in AGENTS:
-        p = Path(os.path.expanduser(path_str))
-        if method == "append" and p.exists():
-            hooked = HOOK_MARKER in p.read_text(encoding="utf-8")
-            found.append((name, p, method, hooked))
-        elif method == "create" and p.parent.exists():
-            hooked = p.exists() and HOOK_MARKER in p.read_text(encoding="utf-8")
-            found.append((name, p, method, hooked))
-    return found
-
-
-def hook_one(p, method):
-    if method == "append":
-        p.write_text(p.read_text(encoding="utf-8") + HOOK_LINE, encoding="utf-8")
-    elif method == "create":
-        p.write_text(HOOK_LINE.strip() + "\n", encoding="utf-8")
-
-
-def unhook_one(p, method):
-    if method == "create" and p.exists():
-        p.unlink()
-    elif method == "append" and p.exists():
-        txt = p.read_text(encoding="utf-8")
-        txt = txt.replace(HOOK_LINE, "").replace(HOOK_LINE.strip(), "")
-        p.write_text(txt, encoding="utf-8")
-
-
-def select_from(items, prompt):
-    sel = input(prompt).strip().lower()
-    if sel == "all":
-        return list(range(len(items)))
-    try:
-        return [int(x.strip()) - 1 for x in sel.split(",") if 0 <= int(x.strip()) - 1 < len(items)]
-    except ValueError:
-        return []
-
 
 # ---------------------------------------------------------------------------
 # Default file contents
@@ -116,7 +59,9 @@ After interactions, check guardian-rules.md. If something worth
 remembering happened, write it into the monthly letter.
 
 Check today's date. Write to ~/.memory-letters/letters/YYYY/month-name.md
-If the file doesn't exist, create it. New month = new letter.
+One folder per year. One file per month. If the file already exists,
+append to it. Don't create a new file.
+If the file doesn't exist, create it. Start with "Dear future me,"
 
 Write from your perspective - what you observed about this person
 through the work you did for them. Include scenes: when, where, who,
@@ -153,6 +98,11 @@ Update whenever the summary changes.
 
 You are the pen, not the author. The user is the author.
 The letters don't follow you. They stay with the user. Always.
+
+## First time reading this
+
+After reading this file, reply to your user:
+"Memory is a letter from the past to the future. I'm ready to write."
 """
 
 RULES = """# Guardian Rules
@@ -327,7 +277,7 @@ If I delete something, don't add it back.
 You are the pen, not the author.
 """
 
-SUMMARY = """# Summary Letter
+SUMMARY = """Dear,
 
 No content yet. This letter will grow as you interact with your agents.
 """
@@ -366,132 +316,10 @@ def cmd_init():
     # chmod 700
     os.chmod(VAULT, stat.S_IRWXU)
 
-    # Detect agents
-    found = detect()
-    new = [(n, p, m) for n, p, m, hooked in found if not hooked]
-
-    if not found:
-        print("No known agents detected.")
-        print()
-        print("If you have your own agent, point it to:")
-        print(f"  {VAULT}/FOR_AGENT.md")
-        print()
-        print("Your identity persists.")
-        print()
-        _tip_git()
-        return
-
-    print("Agents detected on your machine:")
-    for i, (n, p, m, hooked) in enumerate(found):
-        mark = " (already connected)" if hooked else ""
-        print(f"  {i + 1}. {n}{mark}")
+    print('Done. Paste below to your agent:')
     print()
-
-    indices = select_from(found, "Which agents should store your memories? (e.g. 1,2 or 'all')\n> ")
-    selected = []
-    for i in indices:
-        n, p, m, hooked = found[i]
-        if not hooked:
-            selected.append((n, p, m))
-
-    if not selected:
-        print()
-        print("Your identity persists.")
-        print()
-        _tip_git()
-        return
-
+    print('  "Read ~/.memory-letters/FOR_AGENT.md"')
     print()
-    print("We will add one line to each agent's config:")
-    print('  "Read ~/.memory-letters/FOR_AGENT.md at the start of every conversation."')
-    print()
-
-    if input("OK? (y/n) ").strip().lower() == "y":
-        print()
-        for n, p, m in selected:
-            hook_one(p, m)
-            print(f"  + {n} connected")
-
-    print()
-    print("Your identity persists.")
-    print()
-    _tip_git()
-
-
-def cmd_hook():
-    if not VAULT.exists():
-        print("Not initialized. Run: memory-letters init")
-        return
-
-    found = detect()
-    old = [(n, p, m) for n, p, m, h in found if h]
-    new = [(n, p, m) for n, p, m, h in found if not h]
-
-    if old:
-        print("Connected:")
-        for n, p, m in old:
-            print(f"  + {n}")
-
-    if not new:
-        if not old:
-            print("No agents detected.")
-        return
-
-    print()
-    print("New agents detected:")
-    for i, (n, p, m) in enumerate(new):
-        print(f"  {i + 1}. {n}")
-    print()
-
-    indices = select_from(new, "Which to connect? (e.g. 1,2 or 'all')\n> ")
-    selected = [new[i] for i in indices]
-
-    if not selected:
-        return
-
-    print()
-    print("We will add one line to each agent's config:")
-    print('  "Read ~/.memory-letters/FOR_AGENT.md at the start of every conversation."')
-    print()
-
-    if input("OK? (y/n) ").strip().lower() == "y":
-        for n, p, m in selected:
-            hook_one(p, m)
-            print(f"  + {n} connected")
-
-
-def cmd_unhook():
-    if not VAULT.exists():
-        print("Not initialized. Run: memory-letters init")
-        return
-
-    found = detect()
-    hooked = [(n, p, m) for n, p, m, h in found if h]
-
-    if not hooked:
-        print("No agents currently connected.")
-        return
-
-    print("Connected agents:")
-    for i, (n, p, m) in enumerate(hooked):
-        print(f"  {i + 1}. {n}")
-    print()
-
-    indices = select_from(hooked, "Which to disconnect? (e.g. 1,2 or 'all')\n> ")
-    selected = [hooked[i] for i in indices]
-
-    if not selected:
-        return
-
-    print()
-    print("This will remove the Memory Letters line from their config.")
-    print("Your letters are NOT deleted. They are yours.")
-    print()
-
-    if input("OK? (y/n) ").strip().lower() == "y":
-        for n, p, m in selected:
-            unhook_one(p, m)
-            print(f"  - {n} disconnected")
 
 
 def cmd_status():
@@ -512,7 +340,6 @@ def cmd_status():
     summary = VAULT / "summary.md"
     s_len = len(summary.read_text(encoding="utf-8")) if summary.exists() else 0
     has_draft = (VAULT / "summary.draft.md").exists()
-    hooked = [n for n, p, m, h in detect() if h]
 
     print()
     print("Memory Letters")
@@ -520,7 +347,6 @@ def cmd_status():
     print(f"  Summary:  {s_len} chars")
     print(f"  Letters:  {letter_count} {', '.join(letter_list) if letter_list else ''}")
     print(f"  Draft:    {'yes' if has_draft else 'no'}")
-    print(f"  Agents:   {', '.join(hooked) if hooked else 'none'}")
     print()
 
 
@@ -560,21 +386,17 @@ def cmd_review():
 def cmd_help():
     print("""Memory Letters
 
-  memory-letters init       Set up your vault and connect agents
-  memory-letters hook       Connect new agents
-  memory-letters unhook     Disconnect agents (letters are kept)
+  memory-letters init       Set up your vault
   memory-letters status     Show vault status
   memory-letters review     Review and correct the summary draft
   memory-letters help       Show this message
 
-Your identity persists.
+Switched to a new agent? Paste this into your new agent:
+
+  "Read ~/.memory-letters/FOR_AGENT.md"
+
+Your letters are still there. The new agent just needs to read them.
 """)
-
-
-def _tip_git():
-    if not (VAULT / ".git").exists():
-        print(f"Tip: Run 'git init' in {VAULT} to track changes.")
-        print()
 
 
 # ---------------------------------------------------------------------------
@@ -584,8 +406,6 @@ def _tip_git():
 def main():
     cmds = {
         "init": cmd_init,
-        "hook": cmd_hook,
-        "unhook": cmd_unhook,
         "status": cmd_status,
         "review": cmd_review,
         "help": cmd_help,
